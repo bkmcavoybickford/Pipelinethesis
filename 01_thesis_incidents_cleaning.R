@@ -12,6 +12,8 @@ library(knitr)
 library(usmap)
 library(choroplethr)
 library(choroplethrMaps)
+library(viridis)
+library(readxl)
 
 #importing data (PHMSA pipeline incident files, the flagged data version)
 gasdist1 <- read_excel("Data/gd1986tofeb2004.xlsx", sheet = "gd1986tofeb2004")
@@ -101,11 +103,11 @@ kable(gasdist_by_county[1:15, ], "latex")
 
 
 #actually creating the choropleth
-png("Output/incident_choropleth_alltime.png")
+png("Output/incident_choropleth_alltime.png", width = 480, height = 260)
 gasdist_by_county <- gasdist_by_county |>
   mutate(state = State, county = County)
-plot_usmap(regions = "counties", data = gasdist_by_county, values = "n", color = NA) +
-  scale_fill_continuous(low = "red", high = "blue", na.value = "pink", name = "Incidents per County", label = scales::comma) +
+plot_usmap(regions = "counties", exclude = c("AK", "HI"), data = gasdist_by_county, values = "n", color = NA) +
+  scale_fill_viridis(discrete = FALSE, trans = "log", na.value = "black", name = "Incidents per County", label = scales::comma) +
   theme(legend.position = "right")
 dev.off()
 
@@ -118,29 +120,26 @@ gasdist_by_year <- gasdist_total |>
 gasdist_by_year$Year <- as.numeric(gasdist_by_year$Year)
 year_by_n <- lm(gasdist_by_year$n ~ gasdist_by_year$Year)
 png("Output/incidents_by_year.png")
-plot(gasdist_by_year$Year, gasdist_by_year$n, type ="l", ylim = c(0, 215),
-     xlab = "Year", ylab = "Number of Incidents")
-abline(year_by_n, col = "red")
+ggplot(gasdist_by_year, aes(x = Year, y = n)) + geom_line() + geom_smooth(method = "lm") + 
+  labs(x = "Year", y = "Number of Incidents") + ylim(0, 210)
 dev.off()
 
 #now breaking down significant and serious incidents
 gasdist_significant <- gasdist_total |>
   filter(Significant == "YES" & Year != 2024) |>
   group_by(Year) |>
-  tally()
+  tally() |>
+  mutate(Year = as.numeric(Year))
 gasdist_serious <- gasdist_total |>
   filter(Serious == "YES" & Year != 2024) |>
   group_by(Year) |>
-  tally()
+  tally() |>
+  mutate(Year = as.numeric(Year))
 png("Output/serious_and_significant_incidents.png")
-plot(gasdist_by_year$Year, gasdist_by_year$n, type ="l", ylim = c(0, 215),
-     xlab = "Year", ylab = "Number of Incidents")
-lines(gasdist_significant$Year, gasdist_significant$n, type = "l", col = "blue")
-lines(gasdist_serious$Year, gasdist_serious$n, type ="l", col = "red")
-legend(x = "topright",
-       legend = c("All", "Significant", "Serious"),
-       col = c("black", "blue", "red"),
-       lwd = 2)
+ggplot() + geom_line(data = gasdist_by_year, aes(x = Year, y = n, color = "All Incidents")) + ylim(0, 215) + 
+  labs(x = "Year", y = "Number of Incidents", color = "") + 
+  geom_line(data = gasdist_significant, aes(x = Year, y = n, color = "Significant")) + 
+  geom_line(data = gasdist_serious, aes(x = Year, y = n, color = "Serious"))
 dev.off()
 
 #now importing city gate price data
@@ -170,11 +169,9 @@ ggplot(citygate_filtered, aes(x = Date)) +
   geom_line(aes(y = Texas, color = "red")) + 
   geom_line(aes(y = California, color = "green")) +
   geom_line(aes(y = Pennsylvania, color = "blue")) +
-  geom_line(aes(y = `New York`, color = "orange")) +
-  geom_line(aes(y = Michigan, color = "yellow")) +
   ylim(0, 14) +
-  scale_color_manual(labels = c("U.S.", "Texas", "California", "Pennsylvania", "New York", "Michigan"), values = c("black", "red", "green", "blue", "orange", "yellow"), name = "Region") +
-  ylab("Citygate Price")
+  scale_color_manual(labels = c("U.S.", "Texas", "California", "Pennsylvania"), values = c("black", "red", "green", "blue"), name = "Region") +
+  ylab("Citygate Price") + theme_bw()
 dev.off()
 
 #now getting the median city gate price for every statecitygate_filtered <- as.data.frame(citygate_filtered)
@@ -183,19 +180,18 @@ citygate_median <- sapply(citygate_more_filtered, median, na.rm = TRUE)
 citygate_median <- data.frame(citygate_median)
 statenames <- rownames(citygate_median)
 rownames(citygate_median) <- NULL
-citygate_median <- cbind(statenames, citygate_median)
+citygate_median <- cbind(statenames, citygate_median) |>
+  dplyr::rename(state = statenames)
 
 #turning it into a choropleth
-citygate_median$region <- tolower(citygate_median$statenames)
-citygate_median$value <- citygate_median$citygate_median
-citygate_median <- subset(citygate_median, select = c("value", "region"))
-png("Output/citygate_by_state.png")
-state_choropleth(citygate_median)
+png("Output/citygate_by_state.png", width = 600, height = 300)
+plot_usmap(regions = "counties", exclude = c("AK", "HI"), data = citygate_median, values = "citygate_median", color = NA) +
+  scale_fill_viridis(discrete = FALSE, name = "Median City Gate Price", trans = "log", label = scales::comma) +
+  theme(legend.position = "right")
 dev.off()
 median(citygate_filtered$U.S., na.rm = TRUE)
 
 #exporting table
-citygate_median$region <- toupper(citygate_median$region)
 write.csv(citygate_median, "Output/citygate_median_2.csv")
-kable(select(citygate_median, c("region", "value")), "latex")
+kable(select(citygate_median, c("state", "citygate_median")), "latex")
 write.csv(gasdist_total, "Output/gasdist_total.csv")

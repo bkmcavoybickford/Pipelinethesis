@@ -154,3 +154,17 @@ mfx_both_consumptions <- avg_slopes(both_consumptions, variables = c("Citygate",
 #exporting the data
 write.csv(incidents_very_reduced, "Output/Incidents_very_reduced.csv")
 
+
+#plotting marginal effects
+png("Output/probit_all_fe.png")
+plot_predictions(id_month_fe, condition = c("Citygate", "Incident"))
+dev.off()
+png("Output/probit_month_fe.png")
+plot_predictions(month_fe, condition = c("Citygate", "Incident"))
+dev.off()
+png("Output/probit_no_fe.png")
+plot_predictions(no_fe, condition = c("Citygate", "Incident"))
+dev.off()
+png("Output/probit_id_fe.png")
+plot_predictions(id_fe, condition = c("Citygate", "Incident"))
+dev.off()

@@ -2,10 +2,15 @@
 #Note that this file should be run after 01_thesis_summarystats.R and 02_thesis_maindataset.R
 #Currently 03 is a STATA file created by me and Dr. Klara Peter; my goal is to redo it in R
 #This code imports and analyzes annual reports filed by gas distributors
+#Loading packages
+library(usdata)
+library(viridis)
+library(anytime)
 
 #importing data from STATA
 opstateyear <- read_csv("Data/opstateyear.csv") |>
   filter(year > 2003 & year < 2023) |>
+  filter(is.na(commodity) | commodity == "Natural Gas" | commodity == "OTHER GAS: Natural Gas") |>
   mutate(leaks_mains = ifelse(is.na(leaks_mains), 0, leaks_mains)) |>
   mutate(leaks_srvs = ifelse(is.na(leaks_srvs), 0, leaks_srvs)) |>
   mutate(leaks_cor_mains = ifelse(is.na(leaks_cor_mains), 0, leaks_cor_mains)) |>
@@ -17,7 +22,8 @@ opstateyear <- read_csv("Data/opstateyear.csv") |>
   mutate(leaks_of_srvs = ifelse(is.na(leaks_of_srvs), 0, leaks_of_srvs)) |>
   mutate(leaks_nf_srvs = ifelse(is.na(leaks_nf_srvs), 0, leaks_nf_srvs)) |>
   mutate(leaks_mat_srvs = ifelse(is.na(leaks_mat_srvs), 0, leaks_mat_srvs)) |>
-  mutate(leaks_ot_srvs = ifelse(is.na(leaks_ot_srvs), 0, leaks_ot_srvs))
+  mutate(leaks_ot_srvs = ifelse(is.na(leaks_ot_srvs), 0, leaks_ot_srvs)) |>
+  filter(stateabbr != "AK" & stateabbr != "DC" & stateabbr != "HI" & stateabbr != "US")
 
 #summary statistics: generating graphs for the number of leaks of each type for mains
 opstateyear_main_grouped <- opstateyear |>
@@ -91,19 +97,23 @@ opstateyear_by_state <- opstateyear |>
 opstateyear_by_state_2004 <- opstateyear_by_state |>
   filter(year == 2004) |>
   mutate(state = stateabbr)
-png("Output/leaks_per_mile_2004.png")
-plot_usmap(regions = "states", data = opstateyear_by_state_2004, values = "leaks_per_mile") + 
+png("Output/leaks_per_mile_2004.png", width = 600, height = 300)
+plot_usmap(regions = "states", exclude = c("AK", "HI"), data = opstateyear_by_state_2004, values = "leaks_per_mile") + 
   scale_fill_continuous(low = "blue", high = "red", name = "Leaks per Mile in 2004", label = scales::comma) + 
   theme(legend.position = "right")
 dev.off()
 opstateyear_by_state_2022 <- opstateyear_by_state |>
   filter(year == 2022) |>
   mutate(state = stateabbr)
-png("Output/leaks_per_mile_2022.png")
-plot_usmap(regions = "states", data = opstateyear_by_state_2022, values = "leaks_per_mile") + 
+png("Output/leaks_per_mile_2022.png", width = 600, height = 300)
+plot_usmap(regions = "states", exclude = c("AK", "HI"), data = opstateyear_by_state_2022, values = "leaks_per_mile") + 
   scale_fill_continuous(low = "blue", high = "red", name = "Leaks per Mile in 2022", label = scales::comma) + 
   theme(legend.position = "right")
 dev.off()
+
+#adding in histogram of leaks
+hist <- ggplot(data=opstateyear, aes(x = leaks_mains)) +
+  geom_histogram(breaks = c(0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000))
 
 #regression: with lagged consumption, with and without the fixed effects
 opstateyear$ID <- paste(opstateyear$stateabbr, opstateyear$operator_id, sep = "_")
@@ -170,7 +180,6 @@ leaks_both_consumptions <- feols(leaks_mains ~ price + mmiles_total + nsrvcs_tot
                     nofarmi + gdpreal + gdpcap + gdppriv + gdpagri + gdputil + gdpmine + gdpmanf + gdptran + gdpgovt + lagconsumption + consumption|ID + year, data = opstateyear, vcov = "HC1")
 leaks_both_consumptions_sum <- summary(leaks_both_consumptions, vcov = "hetero")
 
-unique(opstateyear$commodity)
 #regressions on points of service with different consumption specifications
 services_consumption <- feols(leaks_srvs ~ price + mmiles_total + nsrvcs_total + avelength + weathdays1 +
                        weathdays2 + weathdays3 + weathdays4 + weathdays5 + weathdays6 + weathdays7 + weathevents +
